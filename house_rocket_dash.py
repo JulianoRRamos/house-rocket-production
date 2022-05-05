@@ -66,7 +66,7 @@ def overview_data(dados):
     df.columns = ['ZipCode', 'Total Houses', 'Price', 'Sqrl_Living', 'Price/m²']
 
     c1.header('Average Values:')
-    c1.dataframe(df, height=600)
+    c1.dataframe(df[['ZipCode', 'Total Houses', 'Price', 'Price/m²']], height=600)
 
     # Filters
     num_attributes = dados.select_dtypes(include=['int64', 'float64'])
@@ -91,7 +91,11 @@ def portfolio_density(dados, geofile):
 
     c3, c4 = st.columns((1, 1))
 
+    #Base reduzida para testes
     df5 = dados.sample(2000)
+
+    #Base completa - produção:
+    #df5 = dados.copy()
 
     # Base Map
     density_map = folium.Map(location=[dados['lat'].mean(), dados['long'].mean()], default_zoom_start=15)
@@ -141,28 +145,33 @@ def portfolio_density(dados, geofile):
 
 def commercial_category(dados):
     st.sidebar.title('Commercial Options:')
-    st.title('Commercial Attributes:')
+    st.title('Commercial Attributes (average price):')
 
     # ---------Preço por ano
+
+    c10, c11 = st.columns((2, 4))
+
     dados['date'] = pd.to_datetime(dados['date']).dt.strftime('%Y-%m-%d')
 
     # Filters
     min_year_built = int(dados['yr_built'].min())
     max_year_built = int(dados['yr_built'].max())
-    st.sidebar.subheader('Selecione o ano máximo de construção:')
-    fil_year_built = st.sidebar.slider('Ano de Construção', min_year_built, max_year_built, min_year_built)
+    st.sidebar.subheader('Select maximum construction year:')
+    fil_year_built = st.sidebar.slider('Build Year', min_year_built, max_year_built, min_year_built)
 
-    st.header('Average price per Year Built')
+    c10.header('per Year Built')
     # Data Filters
     dfPrecoAno = dados.loc[dados['yr_built'] < fil_year_built]
     dfPrecoAno = dfPrecoAno[['yr_built', 'price']].groupby('yr_built').mean().reset_index()
+
+    c10.dataframe(dfPrecoAno)
     # Data Plot
-    fig = px.line(dfPrecoAno, x='yr_built', y='price')
-    st.plotly_chart(fig, use_container_width=True)
+    fig = px.line(dfPrecoAno, x='yr_built', y='price', title="Price evolution per year")
+    c11.plotly_chart(fig, use_container_width=True)
 
     # ---------Preço por dia
-    st.header('Average price per Day')
-    st.sidebar.subheader('Selecione a data máxima:')
+    st.header('per Day')
+    st.sidebar.subheader('Select the maximum date:')
 
     # Filters
     min_date = datetime.strptime(dados['date'].min(), '%Y-%m-%d')
@@ -178,9 +187,30 @@ def commercial_category(dados):
     fig = px.line(dfPrecoDia, x='date', y='price')
     st.plotly_chart(fig, use_container_width=True)
 
+    # ---------Preço por mês
+    c12, c13 = st.columns((2, 4))
+
+    dados['data'] = pd.to_datetime(dados['date'])
+    dados['month'] = pd.to_datetime(dados['data'].dt.year.astype(str) + "-" + dados['data'].dt.month.astype(str) + "-" + "01")
+
+    # Filters
+    # st.sidebar.subheader('Selecione os meses desejados:')
+    # fil_month_built = st.sidebar.multiselect('Month of Year', sorted(dados['month'].unique()))
+
+    c12.header('per Month')
+    # Data Filters
+    dfMediaPrecoPorMes = dados[['price', 'month']].groupby('month').mean().reset_index()
+    c12.dataframe(dfMediaPrecoPorMes, height=600)
+    dfPrecoMes = dfMediaPrecoPorMes.loc[dfMediaPrecoPorMes['month'] < fil_date]
+
+    # Data Plot
+    fig = px.line(dfPrecoMes, x='month', y='price', markers=True, title= "Monthly price evolution")
+    c13.plotly_chart(fig, use_container_width=True)
+
+
     # ---------Histograma
     st.header('Price Distribution')
-    st.sidebar.subheader('Selecione o preço máximo:')
+    st.sidebar.subheader('Select maximum price:')
 
     # Filters
     min_price = int(dados['price'].min())
@@ -207,10 +237,10 @@ def attributes_distribution(dados):
     c5.header('Houses per bedrooms')
 
     # Data Filters
-    fil_bedrooms = st.sidebar.selectbox('Número máximo de Quartos', sorted(set(dados['bedrooms'].unique())))
-    fil_bathrooms = st.sidebar.selectbox('Número máximo de Banheiros', sorted(set(dados['bathrooms'].unique())))
-    fil_floors = st.sidebar.selectbox('Número máximo de andáres', sorted(set(dados['floors'].unique())))
-    fil_waterview = st.sidebar.checkbox('Somente casas com vista para o mar')
+    fil_bedrooms = st.sidebar.selectbox('Maximum number of Rooms', sorted(set(dados['bedrooms'].unique())))
+    fil_bathrooms = st.sidebar.selectbox('Maximum number of Bathrooms', sorted(set(dados['bathrooms'].unique())))
+    fil_floors = st.sidebar.selectbox('Maximum number of floors', sorted(set(dados['floors'].unique())))
+    fil_waterview = st.sidebar.checkbox('Only houses overlooking the sea')
 
     dfBedrooms = dados[dados['bedrooms'] < fil_bedrooms]
 
