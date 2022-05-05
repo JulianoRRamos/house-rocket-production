@@ -58,7 +58,7 @@ def overview_data(dados):
     df3 = dados[['sqft_living', 'zipcode']].groupby('zipcode').mean().reset_index()
     df4 = dados[['price_m2', 'zipcode']].groupby('zipcode').mean().reset_index()
 
-    # #Merge de metricas
+    # Merge de metricas
     m1 = pd.merge(df1, df2, on='zipcode', how='inner')
     m2 = pd.merge(m1, df3, on='zipcode', how='inner')
     df = pd.merge(m2, df3, on='zipcode', how='inner')
@@ -82,6 +82,61 @@ def overview_data(dados):
 
     c2.header('Statistics Descriptions:')
     c2.dataframe(dfStat, height=600)
+
+    #--------------Indicação de Compra
+    # Novo Dataframe com coluna price_median_reg agrupando preço por região (cep)
+    dfBuy = dados[['price', 'zipcode']].groupby('zipcode').median().reset_index()
+    dfBuy.rename(columns={'price': 'price_median_reg'}, inplace=True)
+    # Novo DataFrame merge com o principal
+    dfMedianPriceZip = pd.merge(dados, dfBuy, on='zipcode', how='inner')
+    # Nova coluna com status se deve comprar ou não
+    # - Comprar aqueles com preço menor do que a média da região e for imóvel de boa condição
+    dfMedianPriceZip['status_buy'] = 'not buy'
+    for i, row in dfMedianPriceZip.iterrows():
+        if (row["price"] < row["price_median_reg"]) & (row["condition"] >= 2):
+            dfMedianPriceZip.at[i, 'status_buy'] = 'yes buy'
+    if (fil_zipcode != []):
+        dfMedianPriceZip = dfMedianPriceZip.loc[dfMedianPriceZip['zipcode'].isin(fil_zipcode), :]
+
+    st.header('Indication of purchase - criteria:\n- Properties that are below the median price in the region\n- And that they are in good condition.')
+    st.dataframe(dfMedianPriceZip[['id', 'zipcode', 'price', 'price_median_reg', 'condition','status_buy']].sort_values(by=['condition','status_buy'],ascending=False), height=600)
+
+    # --------------Indicação de Venda
+    st.header('''Indication of the best price and time to sell them:\n 
+              SALE CONDITIONS: 
+              - 1. If the purchase price is greater than the regional median + seasonality: 
+                  The sale price will be equal to the purchase price + 10%\n
+              - 2. If the purchase price is less than the regional median + seasonality: 
+              The sale price will be equal to the purchase price + 30%''')
+    # Criando coluna de preço médio por região
+    df2 = dados[['price', 'zipcode']].groupby('zipcode').median().reset_index()
+    df2.rename(columns={'price': 'price_median_reg'}, inplace=True)
+
+    # Coletando estação do ano de acordo com a data de compra (date)
+    dados['month'] = pd.DatetimeIndex(dados['date']).month
+    dados['season'] = dados['month'].apply(lambda x: 'spring' if 3 < x < 5 else
+    'summer' if 6 < x < 8 else
+    'fall' if 9 < x < 11
+    else 'winter')
+    # Criando coluna de preço médio por estação do ano
+    df3 = dados[['price', 'season']].groupby(['season']).median().reset_index()
+    df3.rename(columns={'price': 'price_median_season'}, inplace=True)
+
+    # Novo DataFrame merge com o principal
+    dfTmp = pd.merge(dados, df2, on='zipcode', how='inner')
+    dfSeasonReg = pd.merge(dfTmp, df3, on='season', how='inner')
+
+    dfSeasonReg['sale_price'] = 0.0
+    for i, row in dfSeasonReg.iterrows():
+        if (row["price"] > row["price_median_reg"]) & (row["price"] > row["price_median_season"]):
+            dfSeasonReg.at[i, 'sale_price'] = float(row["price"]) + (float(row["price"]) * 0.1)
+        else:
+            dfSeasonReg.at[i, 'sale_price'] = float(row["price"]) + (float(row["price"]) * 0.3)
+
+    if (fil_zipcode != []):
+        dfSeasonReg = dfSeasonReg.loc[dfSeasonReg['zipcode'].isin(fil_zipcode), :]
+
+    st.dataframe(dfSeasonReg[['id', 'season', 'zipcode', 'price', 'price_median_reg', 'price_median_season', 'sale_price']].sort_values(by=['sale_price'], ascending=False), height=600)
 
     return None
 
@@ -194,8 +249,6 @@ def commercial_category(dados):
     dados['month'] = pd.to_datetime(dados['data'].dt.year.astype(str) + "-" + dados['data'].dt.month.astype(str) + "-" + "01")
 
     # Filters
-    # st.sidebar.subheader('Selecione os meses desejados:')
-    # fil_month_built = st.sidebar.multiselect('Month of Year', sorted(dados['month'].unique()))
 
     c12.header('per Month')
     # Data Filters
